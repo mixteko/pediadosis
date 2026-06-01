@@ -40,7 +40,29 @@ self.addEventListener('activate', (event) => {
 
 // Fetch Event: network-first or cache-fallback to preserve offline capability inside hospital walls
 self.addEventListener('fetch', (event) => {
-  const requestUrl = new URL(event.request.url);
+  // 1. Only intercept GET requests
+  if (event.request.method !== 'GET') {
+    return;
+  }
+
+  const url = event.request.url;
+  // 2. Only intercept standard HTTP/HTTPS schemes (bypass chrome-extensions, safari-extensions, etc.)
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return;
+  }
+
+  const requestUrl = new URL(url);
+
+  // 3. Bypass Vite development server internals to prevent blank screens during development
+  const isViteInternal = requestUrl.pathname.startsWith('/@') || 
+                         requestUrl.pathname.includes('/node_modules/') || 
+                         requestUrl.pathname.endsWith('.tsx') || 
+                         requestUrl.pathname.endsWith('.ts') ||
+                         requestUrl.pathname.includes('__vite_ping');
+  
+  if (isViteInternal) {
+    return;
+  }
 
   // Skip APIs or external sheets request to let the application fetch fresh data
   if (requestUrl.hostname.includes('spreadsheets.google.com') || requestUrl.pathname.startsWith('/api')) {
@@ -54,39 +76,54 @@ self.addEventListener('fetch', (event) => {
   }
 
   event.respondWith(
-    caches.match(event.request).then((cachedResponse) => {
-      if (cachedResponse) {
-        // Return cached, but fetch fresh in background to update cache (Stale-While-Revalidate)
-        fetch(event.request)
+    caches.match(event.request)
+      .then((cachedResponse) => {
+        if (cachedResponse) {
+          // Return cached, but fetch fresh in background to update cache (Stale-While-Revalidate)
+          fetch(event.request)
+            .then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                caches.open(CACHE_NAME).then((cache) => {
+                  try {
+                    cache.put(event.request, networkResponse);
+                  } catch (e) {
+                    console.warn('[Service Worker] Failed to update cache for:', event.request.url, e);
+                  }
+                });
+              }
+            })
+            .catch(() => { /* ignore offline errors in background */ });
+          return cachedResponse;
+        }
+
+        return fetch(event.request)
           .then((networkResponse) => {
-            if (networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(event.request, networkResponse));
+            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+              return networkResponse;
             }
-          })
-          .catch(() => { /* ignore offline errors in background */ });
-        return cachedResponse;
-      }
 
-      return fetch(event.request)
-        .then((networkResponse) => {
-          if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+            // Cache newly requested frontend assets on the fly
+            const responseToCache = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              try {
+                cache.put(event.request, responseToCache);
+              } catch (e) {
+                console.warn('[Service Worker] Failed to cache response for:', event.request.url, e);
+              }
+            });
+
             return networkResponse;
-          }
-
-          // Cache newly requested frontend assets on the fly
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(event.request, responseToCache);
+          })
+          .catch(() => {
+            // Offline fallback
+            if (event.request.mode === 'navigate') {
+              return caches.match('/index.html');
+            }
           });
-
-          return networkResponse;
-        })
-        .catch(() => {
-          // Offline fallback
-          if (event.request.mode === 'navigate') {
-            return caches.match('/index.html');
-          }
-        });
-    })
+      })
+      .catch((err) => {
+        console.error('[Service Worker] Fetch handler error, fallback to network:', err);
+        return fetch(event.request);
+      })
   );
 });
