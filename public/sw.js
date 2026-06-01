@@ -5,11 +5,11 @@
 
 const CACHE_NAME = 'pediadosis-pro-v2';
 const ASSETS_TO_CACHE = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/icon_192.png',
-  '/icon_512.png'
+  './',
+  'index.html',
+  'manifest.json',
+  'icon_192.png',
+  'icon_512.png'
 ];
 
 // Install Event: cache static shell assets
