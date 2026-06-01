@@ -17,10 +17,23 @@
     
     <!-- Service Worker background activation loader -->
     <script>
+      // Self-heal/clear previous poisoned caches immediately if we ever loaded a 404 page
+      if ('caches' in window) {
+        caches.keys().then((names) => {
+          for (let name of names) {
+            caches.delete(name);
+          }
+        }).catch(err => console.log('Cache clear bypass:', err));
+      }
+
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js')
-            .then((reg) => console.log('Pediadosis Service Worker registered successfully:', reg.scope))
+            .then((reg) => {
+              console.log('Pediadosis Service Worker registered successfully:', reg.scope);
+              // Proactively update to break any previous activation locks
+              reg.update();
+            })
             .catch((err) => console.error('Pediadosis Service Worker registration registry failed:', err));
         });
       }

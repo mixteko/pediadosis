@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-const CACHE_NAME = 'pediadosis-pro-v1';
+const CACHE_NAME = 'pediadosis-pro-v2';
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
@@ -38,22 +38,20 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// Fetch Event: network-first or cache-fallback to preserve offline capability inside hospital walls
+// Fetch Event: Network-First to avoid caching 404 pages during startup/deploys
 self.addEventListener('fetch', (event) => {
-  // 1. Only intercept GET requests
   if (event.request.method !== 'GET') {
     return;
   }
 
   const url = event.request.url;
-  // 2. Only intercept standard HTTP/HTTPS schemes (bypass chrome-extensions, safari-extensions, etc.)
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     return;
   }
 
   const requestUrl = new URL(url);
 
-  // 3. Bypass Vite development server internals to prevent blank screens during development
+  // Bypass Vite development server files
   const isViteInternal = requestUrl.pathname.startsWith('/@') || 
                          requestUrl.pathname.includes('/node_modules/') || 
                          requestUrl.pathname.endsWith('.tsx') || 
@@ -64,66 +62,35 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Skip APIs or external sheets request to let the application fetch fresh data
-  if (requestUrl.hostname.includes('spreadsheets.google.com') || requestUrl.pathname.startsWith('/api')) {
-    event.respondWith(
-      fetch(event.request).catch(() => {
-        // Fallback to match cache if offline
-        return caches.match(event.request);
-      })
-    );
-    return;
-  }
-
+  // Network-First strategy
   event.respondWith(
-    caches.match(event.request)
-      .then((cachedResponse) => {
-        if (cachedResponse) {
-          // Return cached, but fetch fresh in background to update cache (Stale-While-Revalidate)
-          fetch(event.request)
-            .then((networkResponse) => {
-              if (networkResponse && networkResponse.status === 200) {
-                caches.open(CACHE_NAME).then((cache) => {
-                  try {
-                    cache.put(event.request, networkResponse);
-                  } catch (e) {
-                    console.warn('[Service Worker] Failed to update cache for:', event.request.url, e);
-                  }
-                });
-              }
-            })
-            .catch(() => { /* ignore offline errors in background */ });
-          return cachedResponse;
-        }
-
-        return fetch(event.request)
-          .then((networkResponse) => {
-            if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
-              return networkResponse;
+    fetch(event.request)
+      .then((networkResponse) => {
+        // ONLY cache successful standard 200 responses. NEVER cache 404 or bad requests!
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            try {
+              cache.put(event.request, responseToCache);
+            } catch (e) {
+              console.warn('[Service Worker] Put failed for:', event.request.url, e);
             }
-
-            // Cache newly requested frontend assets on the fly
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME).then((cache) => {
-              try {
-                cache.put(event.request, responseToCache);
-              } catch (e) {
-                console.warn('[Service Worker] Failed to cache response for:', event.request.url, e);
-              }
-            });
-
-            return networkResponse;
-          })
-          .catch(() => {
-            // Offline fallback
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // Fallback to cache ONLY if offline/network fails
+        return caches.match(event.request)
+          .then((cachedResponse) => {
+            if (cachedResponse) {
+              return cachedResponse;
+            }
+            // Navigate request fallback to index
             if (event.request.mode === 'navigate') {
               return caches.match('/index.html');
             }
           });
-      })
-      .catch((err) => {
-        console.error('[Service Worker] Fetch handler error, fallback to network:', err);
-        return fetch(event.request);
       })
   );
 });
