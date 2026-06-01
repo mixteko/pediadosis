@@ -1,0 +1,6 @@
+{
+  "name": "Pediadosis Pro",
+  "description": "Calculadora de dosis pediátricas de medicamentos con sincronización en tiempo real desde la base de datos de Google Sheets.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

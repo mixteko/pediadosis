@@ -1,0 +1,25 @@
+{
+  "name": "Pediadosis Pro - Dosis Pediátricas Seguras",
+  "short_name": "Pediadosis Pro",
+  "description": "Calculadora de dosis pediátricas de medicamentos con sincronización en tiempo real desde la base de datos de Google Sheets.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f9f9fc",
+  "theme_color": "#006877",
+  "categories": ["medical", "productivity"],
+  "icons": [
+    {
+      "src": "/icon_192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon_512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
